@@ -277,8 +277,8 @@ class LocaForgePatcher:
         except ImportError:
             return 0
 
-        shared_bundles = list(self.game_root.glob("**/localization-assets-shared*.bundle"))
-        en_bundles = list(self.game_root.glob("**/localization-string-tables-english*.bundle"))
+        shared_bundles = [b for b in self.game_root.glob("**/localization-assets-shared*.bundle") if "Localization_Backup" not in str(b)]
+        en_bundles = [b for b in self.game_root.glob("**/localization-string-tables-english*.bundle") if "Localization_Backup" not in str(b)]
 
         if not en_bundles:
             return 0
@@ -384,7 +384,7 @@ class LocaForgePatcher:
     def _disable_addressables_crc(self):
         """Disables CRC checking in Addressables catalog.json so modified bundles load without CRC mismatch"""
         import base64
-        catalogs = list(self.game_root.glob("**/StreamingAssets/aa/catalog.json"))
+        catalogs = [c for c in self.game_root.glob("**/StreamingAssets/aa/catalog.json") if "Localization_Backup" not in str(c)]
         for cat_p in catalogs:
             try:
                 self._backup_file(cat_p)
