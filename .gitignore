@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+.locaforge_staging/
+Localization_Source/
+Localization_Backup/
+*.zip
+
