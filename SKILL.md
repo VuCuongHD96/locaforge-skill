@@ -4,7 +4,8 @@ description: >-
   Universal game localization and Vietnamese translation workflow using LocaForge for any game engine (Unity, Unreal Engine, RPG Maker, Ren'Py, Godot, GameMaker, and Direct Text/Config). Activate this skill when the user asks to:
   (1) Trích xuất file source text từ game để dịch ("trích xuất file source text", "tìm file text game", "extract game strings", "chuẩn bị file dịch"),
   (2) Tạo project trên web LocaForge và đẩy file source lên ("tạo project trên web", "đẩy file source lên locaforge", "upload bảng dịch lên web"),
-  (3) Cài đặt bản dịch Việt hoá vào game từ file ZIP ("cài Việt Hoá", "import bản dịch vào game", "patch tiếng Việt", "đóng gói file việt hoá").
+  (3) Cài đặt bản dịch Việt hoá vào game từ file ZIP ("cài Việt Hoá", "import bản dịch vào game", "patch tiếng Việt"),
+  (4) Đóng gói bản ZIP việt hoá thành phẩm & đẩy lên Google Drive / Web ("đóng file zip việt hoá", "đẩy bản zip lên web", "tạo bản cài game việt hoá", "pack patch zip").
 ---
 
 # LocaForge Universal Game Localization Skill
@@ -13,7 +14,7 @@ Bộ quy chuẩn và công cụ tự động hóa toàn diện giúp AI Agent v�
 
 ---
 
-## 🧭 Tổng Quan Quy Trình 3 Bước
+## 🧭 Tổng Quan Quy Trình 4 Bước
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -25,6 +26,9 @@ Bộ quy chuẩn và công cụ tự động hóa toàn diện giúp AI Agent v�
 ├────────────────────────────────────────────────────────────────────────┤
 │ BƯỚC 3: DỊCH XONG ──► CÀI ĐẶT VIỆT HOÁ VÀO GAME                        │
 │ LocaForge Export ZIP ──► [locaforge_patch] ──► Game Ready in VN!       │
+├────────────────────────────────────────────────────────────────────────┤
+│ BƯỚC 4: ĐÓNG GÓI BẢN CÀI CHO GAME THỦ (.ZIP) & LƯU GOOGLE DRIVE        │
+│ Game Files ──► [locaforge_patch --pack-patch] ──► Google Drive Hub 🌐  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -147,10 +151,52 @@ Thông báo kết quả cho người dùng:
 
 ---
 
+## 4. Yêu Cầu 4: Đóng Gói Bản Cài Đặt Game (.ZIP) & Lưu Trữ Lên Google Drive
+
+Khi người dùng ra lệnh:
+> *"Đóng gói bản zip việt hoá này để gửi cho người khác chơi"*  
+> *"Đẩy bản zip việt hoá lên web"*  
+> *"Tạo bản cài đặt game hoàn chỉnh"*  
+> *"Đóng file zip giải nén ra là có việt hoá ngay"*
+
+### Kho Lưu Trữ Mặc Định:
+- **Google Drive Hub**: `https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing`
+- **Folder ID**: `1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi`
+
+### Hành Động Bắt Buộc Của Agent:
+
+#### 4.1. Đóng Gói File ZIP Thành Phẩm Cho Game Thủ
+Agent chạy script tự động quét các file đã patch (dựa trên `Localization_Backup/`) và nén theo đúng cây thư mục game:
+```bash
+python3 scripts/locaforge_patch.py --pack-patch
+```
+Hoặc chỉ định tên file:
+```bash
+python3 scripts/locaforge_patch.py --pack-patch --output "<Tên_Game>_Vietnamese_Patch.zip"
+```
+Script sẽ tự động:
+1. Chỉ nén các file game đã thay đổi (`.bundle`, `.json`, `catalog.json`, `game/tl/vietnamese/`).
+2. Giữ nguyên 100% cấu trúc thư mục tương đối để game thủ chỉ việc "Extract Here" đè vào thư mục game.
+3. Tự động sinh file `Huong_Dan_Cai_Dat.txt` bỏ vào root của ZIP.
+4. Báo cáo dung lượng (thường chỉ 1MB - 15MB, nén mức tối đa level 9).
+
+#### 4.2. Bàn Giao Link Tải & Lưu Trữ Lên Google Drive
+Sau khi đóng gói xong, Agent gửi báo cáo:
+- Tên file ZIP và vị trí lưu trên máy.
+- Hướng dẫn đưa lên kho Google Drive chung của LocaForge:
+  ```text
+  📁 Kho Google Drive: https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing
+  ```
+- Nếu có `PROJECT_ID`: Agent hỗ trợ gắn link tải Google Drive vào dự án trên web LocaForge.
+
+---
+
 ## ⚠️ Quy Tắc Bất Di Bất Dịch (Golden Rules)
 
-1. **Tuyệt Đối Không Thay Đổi Key / ID**: Game Engine truy xuất chuỗi văn bản thông qua `id` và `key`. Mọi hành động thay đổi các giá trị này sẽ gây crash game hoặc không hiển thị text.
-2. **Bảo Toàn Placeholder**: Các biến số như `{0}`, `{1}`, `%s`, `{player}`, mã màu `<color=#FF0000>` phải được giữ nguyên vẹn trong bản dịch.
-3. **Luôn Luôn Backup Trước Khi Patch**: Phải lưu bản sao nguyên gốc vào `Localization_Backup/` để người chơi có thể khôi phục bất cứ lúc nào.
-4. **Mã Hoá UTF-8 Chuẩn**: Toàn bộ tệp bản dịch xuất ra và nạp vào phải sử dụng UTF-8 (hoặc UTF-8 with BOM đối với CSV trên Windows) để hiển thị trọn vẹn dấu tiếng Việt.
+1. **Chuẩn 1-Click "Extract & Play"**: Bản ZIP đóng gói cho game thủ phải giải nén đè vào game là chơi được ngay, không bắt game thủ phải cài đặt môi trường lập trình hay cấu hình thủ công.
+2. **Tối Ưu Dung Lượng (Zero Bloat)**: Chỉ đóng gói các file thực sự đã được Việt hoá (so khớp từ `Localization_Backup/`). Tuyệt đối không nén toàn bộ thư mục game hoặc file `.exe` nặng.
+3. **Tuyệt Đối Không Thay Đổi Key / ID**: Game Engine truy xuất chuỗi văn bản thông qua `id` và `key`. Mọi hành động thay đổi các giá trị này sẽ gây crash game hoặc không hiển thị text.
+4. **Bảo Toàn Placeholder**: Các biến số như `{0}`, `{1}`, `%s`, `{player}`, mã màu `<color=#FF0000>` phải được giữ nguyên vẹn trong bản dịch.
+5. **Luôn Luôn Backup Trước Khi Patch**: Phải lưu bản sao nguyên gốc vào `Localization_Backup/` để người chơi có thể khôi phục bất cứ lúc nào.
+6. **Mã Hoá UTF-8 Chuẩn**: Toàn bộ tệp bản dịch xuất ra và nạp vào phải sử dụng UTF-8 (hoặc UTF-8 with BOM đối với CSV trên Windows) để hiển thị trọn vẹn dấu tiếng Việt.
 
