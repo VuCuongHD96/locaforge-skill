@@ -21,7 +21,7 @@ import csv
 import io
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -74,7 +74,7 @@ class LocaForgeSync:
 
     def create_project(self, title: str, description: str = "", user_id: Optional[str] = None) -> Dict[str, Any]:
         proj_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).isoformat()
         payload = {
             "id": proj_id,
             "title": title.strip(),
@@ -98,7 +98,7 @@ class LocaForgeSync:
         file_id = str(uuid.uuid4())
         file_name = path.name
         ext = path.suffix.lower().lstrip(".") or "json"
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).isoformat()
 
         # 1. Register in project_files
         file_payload = {
