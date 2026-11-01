@@ -77,9 +77,9 @@ class GameDetector:
 
     def _check_unity(self) -> Dict[str, Any]:
         # Look for *_Data folder or UnityPlayer / Managed
-        data_dirs = list(self.root.glob("*_Data"))
+        data_dirs = list(self.root.glob("*_Data")) + list(self.root.glob("*/*_Data"))
         # Check Mac App bundle
-        mac_data = list(self.root.glob("*.app/Contents/Resources/Data"))
+        mac_data = list(self.root.glob("*.app/Contents/Resources/Data")) + list(self.root.glob("*/*.app/Contents/Resources/Data"))
         if mac_data:
             data_dirs.extend(mac_data)
 

@@ -383,6 +383,75 @@ class LocaForgeExtractor:
                     "vietnamese": r.get("vietnamese", ""),
                 })
 
+    def extract_unity_localization_bundles(self, root_dir: Path) -> List[Dict[str, Any]]:
+        """Extracts Unity Localization Package Addressable StringTable bundles using UnityPy"""
+        try:
+            import UnityPy
+        except ImportError:
+            return []
+
+        shared_bundles = list(root_dir.glob("**/localization-assets-shared*.bundle"))
+        en_bundles = list(root_dir.glob("**/localization-string-tables-english*.bundle"))
+
+        if not en_bundles:
+            return []
+
+        shared_keys: Dict[str, Dict[int, str]] = {}
+        if shared_bundles:
+            for sb in shared_bundles:
+                try:
+                    s_env = UnityPy.load(str(sb))
+                    for obj in s_env.objects:
+                        if obj.type.name == 'MonoBehaviour':
+                            tree = obj.read_typetree()
+                            name = tree.get('m_Name', '')
+                            if 'Shared Data' in name:
+                                clean_name = name.replace(' Shared Data', '').strip()
+                                if clean_name not in shared_keys:
+                                    shared_keys[clean_name] = {}
+                                for item in tree.get('m_Entries', []):
+                                    shared_keys[clean_name][item.get('m_Id')] = item.get('m_Key', '')
+                except Exception as e:
+                    print(f"  ⚠️ Warning reading shared bundle {sb.name}: {e}")
+
+        total_records = []
+        for eb in en_bundles:
+            try:
+                en_env = UnityPy.load(str(eb))
+                for obj in en_env.objects:
+                    if obj.type.name == 'MonoBehaviour':
+                        tree = obj.read_typetree()
+                        table_full_name = tree.get('m_Name', '')
+                        if table_full_name.endswith('_en'):
+                            clean_table = table_full_name[:-3]
+                            records = []
+                            key_map = shared_keys.get(clean_table, {})
+                            for item in tree.get('m_TableData', []):
+                                m_id = item.get('m_Id')
+                                text = item.get('m_Localized', '')
+                                key = key_map.get(m_id, f"key_{m_id}")
+                                if text is not None and str(text).strip():
+                                    records.append({
+                                        "table": clean_table,
+                                        "id": m_id,
+                                        "key": key,
+                                        "english": text,
+                                        "vietnamese": "",
+                                    })
+                            if records:
+                                out_json = self.tables_dir / f"{clean_table}.json"
+                                out_csv = self.tables_dir / f"{clean_table}.csv"
+                                with open(out_json, "w", encoding="utf-8") as f:
+                                    json.dump(records, f, indent=2, ensure_ascii=False)
+                                self._save_csv(out_csv, records)
+                                self.extracted_records.extend(records)
+                                total_records.extend(records)
+                                print(f"  • [Unity StringTable] {clean_table:<18} ➔ {len(records)} strings")
+            except Exception as e:
+                print(f"  ⚠️ Error reading bundle {eb.name}: {e}")
+
+        return total_records
+
     def save_summary(self):
         """Generates all_strings.json and all_strings.csv in Localization_Source"""
         if not self.extracted_records:
@@ -419,20 +488,33 @@ def main():
         records = extractor.extract_file(str(target))
         print(f" Extracted {len(records)} strings from {target.name}")
     elif target.is_dir():
-        count_files = 0
-        exts = {".json", ".csv", ".po", ".xml", ".ini", ".srt", ".lang", ".txt"}
-        for root, _, files in os.walk(target):
-            for f in sorted(files):
-                if Path(f).suffix.lower() in exts:
-                    full_p = Path(root) / f
-                    try:
-                        recs = extractor.extract_file(str(full_p))
-                        if recs:
-                            count_files += 1
-                            print(f"  • {full_p.name:<30} ➔ {len(recs)} strings")
-                    except Exception as e:
-                        print(f"  ⚠️ Skip {f}: {e}")
-        print(f"\n Processed {count_files} files.")
+        # 1. Try Unity Localization Bundles first
+        unity_records = extractor.extract_unity_localization_bundles(target)
+
+        # 2. Extract loose text/JSON/CSV/PO files only if not a Unity bundle game
+        if not unity_records:
+            count_files = 0
+            exts = {".json", ".csv", ".po", ".xml", ".ini", ".srt", ".lang", ".txt"}
+            skip_dirs = {"monobleedingedge", "steam_settings", ".agents", "localization_source", "localization_backup", ".git", "node_modules"}
+
+            for root, _, files in os.walk(target):
+                root_lower = root.lower()
+                if any(s in root_lower for s in skip_dirs):
+                    continue
+                for f in sorted(files):
+                    if Path(f).suffix.lower() in exts:
+                        full_p = Path(root) / f
+                        if f in {"RuntimeInitializeOnLoads.json", "ScriptingAssemblies.json", "settings.json", "catalog.json", "UnityServicesProjectConfiguration.json"}:
+                            continue
+                        try:
+                            recs = extractor.extract_file(str(full_p))
+                            if recs:
+                                count_files += 1
+                                print(f"  • {full_p.name:<30} ➔ {len(recs)} strings")
+                        except Exception as e:
+                            print(f"  ⚠️ Skip {f}: {e}")
+            if count_files > 0:
+                print(f"\n Processed {count_files} loose text files.")
 
     extractor.save_summary()
     print(f"\n🎉 Finished! Source files ready in: {out_dir}/")
