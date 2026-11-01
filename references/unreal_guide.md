@@ -40,3 +40,4 @@ Hướng dẫn dịch game phát triển bằng Unreal Engine 4 / Unreal Engine 
    ```
 3. Đẩy lên web LocaForge, dịch và xuất file ZIP.
 4. Nạp bản dịch bằng `locaforge_patch.py`.
+

@@ -132,3 +132,4 @@ locaforge-skill/
 ## 📜 Giấy Phép (License)
 Dự án được phân phối dưới giấy phép **MIT License**.
 Phát triển bởi đội ngũ **LocaForge** dành cho cộng đồng Việt hoá Game.
+

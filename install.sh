@@ -27,3 +27,4 @@ chmod +x "$TARGET_DIR/scripts"/*.py 2>/dev/null || true
 echo "✅ LocaForge Skill installed successfully!"
 echo "🎮 Open any game folder in Antigravity IDE and prompt:"
 echo "   'Tìm File source text để tôi có thể Việt Hoá'"
+

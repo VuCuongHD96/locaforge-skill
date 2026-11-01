@@ -87,3 +87,4 @@ Tệp sao lưu chuỗi văn bản hoặc bản địa hóa định dạng gốc 
 
 ## 9. Định Dạng Gốc (Original In-Place Engine)
 LocaForge hỗ trợ `UniversalInPlaceEngine` ghi nhớ cấu trúc offset của file nạp vào và thay thế chuỗi dịch trực tiếp vào vị trí tương ứng mà không làm xáo trộn format gốc của game engine.
+

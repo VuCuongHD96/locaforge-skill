@@ -50,3 +50,4 @@ Khi người dùng mở thư mục game trong Antigravity IDE, họ có thể s�
 3. Tự động backup file gốc vào `Localization_Backup/`.
 4. Nạp đè chuỗi tiếng Việt vào cấu trúc game và đối soát mã hoá UTF-8.
 5. Thông báo người dùng khởi động game để chiêm ngưỡng kết quả thực tế.
+

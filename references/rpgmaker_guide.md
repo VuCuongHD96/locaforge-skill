@@ -49,3 +49,4 @@ python3 scripts/locaforge_patch.py --project-id <id>
 1. Tự động backup `data/` vào `Localization_Backup/data/`.
 2. Ghi đè các chuỗi tiếng Việt đã dịch vào `data/*.json`.
 3. Kiểm tra mã hoá UTF-8 chuẩn xác, không bị lỗi dấu tiếng Việt khi load trong trình duyệt Chromium / Electron của RPG Maker.
+

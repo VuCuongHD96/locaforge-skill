@@ -61,3 +61,4 @@ python3 scripts/locaforge_patch.py --zip Vietnamese_Patch.zip
 ```
 `locaforge_patch.py` sẽ tự động chuyển đổi JSON bản dịch từ LocaForge sang file `.rpy` chuẩn Ren'Py và đặt vào `game/tl/vietnamese/`.
 Người chơi chỉ cần vào game chọn ngôn ngữ "Vietnamese" trong Settings hoặc Ren'Py sẽ kích hoạt ngay!
+

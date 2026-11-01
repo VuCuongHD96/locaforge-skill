@@ -31,3 +31,4 @@ if (Test-Path (Join-Path $SourceDir "examples")) {
 Write-Host "✅ LocaForge Skill installed successfully!" -ForegroundColor Green
 Write-Host "🎮 Open any game folder in Antigravity IDE and prompt:" -ForegroundColor Yellow
 Write-Host "   'Tìm File source text để tôi có thể Việt Hoá'" -ForegroundColor White
+

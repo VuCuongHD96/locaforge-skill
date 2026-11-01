@@ -59,3 +59,4 @@ Script sẽ tự động sao lưu file gốc vào `Localization_Backup/` và ghi
 - Nếu tiếng Việt bị lỗi hiển thị (ô vuông `□` hoặc mất dấu `?`):
   - Game Unity sử dụng TextMeshPro (TMP) cần font atlas hỗ trợ Unicode tiếng Việt (`Latin-1 Supplement` + `Latin Extended-A` + `Latin Extended Additional`).
   - Thay thế font asset trong `StreamingAssets/Fonts/` hoặc nạp font TTF/OTF hỗ trợ tiếng Việt qua Mod.
+
