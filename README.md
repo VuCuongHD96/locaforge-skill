@@ -80,6 +80,22 @@ Sau khi cài đặt Skill, mở bất kỳ thư mục game nào trong **Antigrav
 
 ---
 
+### Bước 4: Yêu cầu đóng gói & đẩy file ZIP lên project
+> 💬 **Bạn gõ:**  
+> *"Đẩy file zip lên project"*  
+> Hoặc:  
+> *"Đóng gói bản zip việt hoá này để gửi cho người khác chơi"*  
+> Hoặc:  
+> *"Tạo bản cài đặt game hoàn chỉnh và đẩy lên web"*
+
+🤖 **AI Agent sẽ:**
+1. Chạy `python3 scripts/locaforge_patch.py --pack-patch` nén gọn các file đã Việt hoá theo đúng cấu trúc game (kèm `Huong_Dan_Cai_Dat.txt`).
+2. Hướng dẫn lưu file ZIP vào Google Drive Hub: `https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing`.
+3. Gắn liên kết tải ZIP vào dự án qua `python3 scripts/locaforge_sync.py set-patch --project-id <id> --url "<URL>"`, kích hoạt ngay nút **"Bản Cài Game (.ZIP)"** trên web LocaForge.
+4. Hỗ trợ đẩy cả gói ZIP text nguồn qua `python3 scripts/locaforge_sync.py push-zip --project-id <id> <file.zip>`.
+
+---
+
 ## 📁 Cấu Trúc Thư Mục Skill
 
 ```

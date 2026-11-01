@@ -5,7 +5,7 @@ description: >-
   (1) Trích xuất file source text từ game để dịch ("trích xuất file source text", "tìm file text game", "extract game strings", "chuẩn bị file dịch"),
   (2) Tạo project trên web LocaForge và đẩy file source lên ("tạo project trên web", "đẩy file source lên locaforge", "upload bảng dịch lên web"),
   (3) Cài đặt bản dịch Việt hoá vào game từ file ZIP ("cài Việt Hoá", "import bản dịch vào game", "patch tiếng Việt"),
-  (4) Đóng gói bản ZIP việt hoá thành phẩm & đẩy lên Google Drive / Web ("đóng file zip việt hoá", "đẩy bản zip lên web", "tạo bản cài game việt hoá", "pack patch zip").
+  (4) Đóng gói bản cài đặt game và đẩy link tải lên project web ("đẩy file zip lên project", "đóng gói bản zip", "tạo file zip cài game").
 ---
 
 # LocaForge Universal Game Localization Skill
@@ -14,7 +14,7 @@ Bộ quy chuẩn và công cụ tự động hóa toàn diện giúp AI Agent v�
 
 ---
 
-## 🧭 Tổng Quan Quy Trình 4 Bước
+## 🧭 Tổng Quan Quy Trình 3 Bước
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -26,9 +26,6 @@ Bộ quy chuẩn và công cụ tự động hóa toàn diện giúp AI Agent v�
 ├────────────────────────────────────────────────────────────────────────┤
 │ BƯỚC 3: DỊCH XONG ──► CÀI ĐẶT VIỆT HOÁ VÀO GAME                        │
 │ LocaForge Export ZIP ──► [locaforge_patch] ──► Game Ready in VN!       │
-├────────────────────────────────────────────────────────────────────────┤
-│ BƯỚC 4: ĐÓNG GÓI BẢN CÀI CHO GAME THỦ (.ZIP) & LƯU GOOGLE DRIVE        │
-│ Game Files ──► [locaforge_patch --pack-patch] ──► Google Drive Hub 🌐  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -151,52 +148,36 @@ Thông báo kết quả cho người dùng:
 
 ---
 
-## 4. Yêu Cầu 4: Đóng Gói Bản Cài Đặt Game (.ZIP) & Lưu Trữ Lên Google Drive
+## 4. Yêu Cầu 4: Đóng Gói Bản Cài Game & Đẩy File ZIP Lên Project
 
 Khi người dùng ra lệnh:
-> *"Đóng gói bản zip việt hoá này để gửi cho người khác chơi"*  
-> *"Đẩy bản zip việt hoá lên web"*  
-> *"Tạo bản cài đặt game hoàn chỉnh"*  
-> *"Đóng file zip giải nén ra là có việt hoá ngay"*
-
-### Kho Lưu Trữ Mặc Định:
-- **Google Drive Hub**: `https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing`
-- **Folder ID**: `1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi`
+> *"Đã test game xong, đẩy file zip Việt Hoá lên project"*  
+> *"Đóng gói bản zip việt hoá này và đẩy lên project"*  
+> *"Tạo file zip cài game và gắn link lên web"*
 
 ### Hành Động Bắt Buộc Của Agent:
 
-#### 4.1. Đóng Gói File ZIP Thành Phẩm Cho Game Thủ
-Agent chạy script tự động quét các file đã patch (dựa trên `Localization_Backup/`) và nén theo đúng cây thư mục game:
+#### 4.1. Đóng Gói Bản Cài Đặt Game (.ZIP) Plug & Play
+Chạy lệnh gom các file game đã được patch thành gói cài đặt độc lập:
 ```bash
-python3 scripts/locaforge_patch.py --pack-patch
+python3 scripts/locaforge_patch.py --pack-patch --project-id "<PROJECT_ID>"
 ```
-Hoặc chỉ định tên file:
-```bash
-python3 scripts/locaforge_patch.py --pack-patch --output "<Tên_Game>_Vietnamese_Patch.zip"
-```
-Script sẽ tự động:
-1. Chỉ nén các file game đã thay đổi (`.bundle`, `.json`, `catalog.json`, `game/tl/vietnamese/`).
-2. Giữ nguyên 100% cấu trúc thư mục tương đối để game thủ chỉ việc "Extract Here" đè vào thư mục game.
-3. Tự động sinh file `Huong_Dan_Cai_Dat.txt` bỏ vào root của ZIP.
-4. Báo cáo dung lượng (thường chỉ 1MB - 15MB, nén mức tối đa level 9).
+Lệnh sẽ sinh ra gói `[GameName]_Vietnamese_Patch.zip` chứa cấu trúc thư mục game sẵn sàng sao chép đè kèm theo tệp `HUONG_DAN_CAI_DAT.txt`.
 
-#### 4.2. Bàn Giao Link Tải & Lưu Trữ Lên Google Drive
-Sau khi đóng gói xong, Agent gửi báo cáo:
-- Tên file ZIP và vị trí lưu trên máy.
-- Hướng dẫn đưa lên kho Google Drive chung của LocaForge:
-  ```text
-  📁 Kho Google Drive: https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing
-  ```
-- Nếu có `PROJECT_ID`: Agent hỗ trợ gắn link tải Google Drive vào dự án trên web LocaForge.
+#### 4.2. Gắn Link Bản Cài ZIP Lên Project Web
+Thực thi lệnh liên kết URL tải bản cài game lên Supabase Project:
+```bash
+python3 scripts/locaforge_sync.py set-patch --project-id "<PROJECT_ID>" --url "<URL_GDRIVE_HOẶC_DIRECT_ZIP>"
+```
+- Sử dụng Google Drive Hub mặc định hoặc link tải trực tiếp do người dùng cung cấp.
+- Khi được liên kết, nút **"Bản Cài Game (.ZIP)"** màu xanh ngọc trên LocaForge Web sẽ tự động kích hoạt để cộng đồng người chơi có thể tải về cài đặt 1-click.
 
 ---
 
 ## ⚠️ Quy Tắc Bất Di Bất Dịch (Golden Rules)
 
-1. **Chuẩn 1-Click "Extract & Play"**: Bản ZIP đóng gói cho game thủ phải giải nén đè vào game là chơi được ngay, không bắt game thủ phải cài đặt môi trường lập trình hay cấu hình thủ công.
-2. **Tối Ưu Dung Lượng (Zero Bloat)**: Chỉ đóng gói các file thực sự đã được Việt hoá (so khớp từ `Localization_Backup/`). Tuyệt đối không nén toàn bộ thư mục game hoặc file `.exe` nặng.
-3. **Tuyệt Đối Không Thay Đổi Key / ID**: Game Engine truy xuất chuỗi văn bản thông qua `id` và `key`. Mọi hành động thay đổi các giá trị này sẽ gây crash game hoặc không hiển thị text.
-4. **Bảo Toàn Placeholder**: Các biến số như `{0}`, `{1}`, `%s`, `{player}`, mã màu `<color=#FF0000>` phải được giữ nguyên vẹn trong bản dịch.
-5. **Luôn Luôn Backup Trước Khi Patch**: Phải lưu bản sao nguyên gốc vào `Localization_Backup/` để người chơi có thể khôi phục bất cứ lúc nào.
-6. **Mã Hoá UTF-8 Chuẩn**: Toàn bộ tệp bản dịch xuất ra và nạp vào phải sử dụng UTF-8 (hoặc UTF-8 with BOM đối với CSV trên Windows) để hiển thị trọn vẹn dấu tiếng Việt.
+1. **Tuyệt Đối Không Thay Đổi Key / ID**: Game Engine truy xuất chuỗi văn bản thông qua `id` và `key`. Mọi hành động thay đổi các giá trị này sẽ gây crash game hoặc không hiển thị text.
+2. **Bảo Toàn Placeholder**: Các biến số như `{0}`, `{1}`, `%s`, `{player}`, mã màu `<color=#FF0000>` phải được giữ nguyên vẹn trong bản dịch.
+3. **Luôn Luôn Backup Trước Khi Patch**: Phải lưu bản sao nguyên gốc vào `Localization_Backup/` để người chơi có thể khôi phục bất cứ lúc nào.
+4. **Mã Hoá UTF-8 Chuẩn**: Toàn bộ tệp bản dịch xuất ra và nạp vào phải sử dụng UTF-8 (hoặc UTF-8 with BOM đối với CSV trên Windows) để hiển thị trọn vẹn dấu tiếng Việt.
 

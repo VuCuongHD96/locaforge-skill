@@ -51,3 +51,26 @@ Khi người dùng mở thư mục game trong Antigravity IDE, họ có thể s�
 4. Nạp đè chuỗi tiếng Việt vào cấu trúc game và đối soát mã hoá UTF-8.
 5. Thông báo người dùng khởi động game để chiêm ngưỡng kết quả thực tế.
 
+---
+
+## 4. Yêu cầu đóng gói & đẩy file ZIP lên project
+> **User Prompt:**  
+> *"Đẩy file zip lên project"*  
+> Hoặc:  
+> *"Đóng gói bản zip việt hoá này và đẩy lên project"*  
+> Hoặc:  
+> *"Tạo file zip cài game và gắn link lên web"*  
+> Hoặc:  
+> *"Upload file zip patch lên project"*  
+> Hoặc:  
+> *"Đẩy file zip Localization_Source.zip lên dự án"*
+
+**Hành vi của AI Agent:**
+1. Nếu cần đóng gói bản cài game: Chạy `python3 scripts/locaforge_patch.py --pack-patch --project-id <id>` để gom toàn bộ file đã dịch theo chuẩn Plug & Play.
+2. Hướng dẫn lưu file ZIP vào Google Drive Hub: `https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing`.
+3. Gắn trực tiếp liên kết tải ZIP vào dự án trên Web:
+   `python3 scripts/locaforge_sync.py set-patch --project-id <id> --url "<LINK_GDRIVE_HOAC_DIRECT_ZIP>"`
+   Kích hoạt nút **"Bản Cài Game (.ZIP)"** màu xanh ngọc trên LocaForge Web.
+4. Nếu người dùng muốn đẩy gói ZIP chứa file text nguồn:
+   Chạy `python3 scripts/locaforge_sync.py push-zip --project-id <id> "<duong_dan_file.zip>"` để bung nén và đẩy toàn bộ chuỗi lên web.
+

@@ -68,14 +68,6 @@ class LocaForgeSync:
     def list_projects(self, limit: int = 10) -> List[Dict[str, Any]]:
         return self._request(f"projects?select=id,title,description,created_at,download_count&order=created_at.desc&limit={limit}")
 
-    def set_patch_url(self, project_id: str, patch_url: str) -> Dict[str, Any]:
-        payload = {
-            "patch_url": patch_url.strip(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }
-        res = self._request(f"projects?id=eq.{project_id}", method="PATCH", data=payload)
-        return res[0] if res else payload
-
     def get_project(self, project_id: str) -> Optional[Dict[str, Any]]:
         res = self._request(f"projects?select=*,project_files(*)&id=eq.{project_id}&limit=1")
         return res[0] if res else None
@@ -323,6 +315,46 @@ class LocaForgeSync:
 
         return str(zip_path.resolve())
 
+    def set_patch_url(self, project_id: str, patch_url: str) -> Dict[str, Any]:
+        """Updates the patch download URL on the project to enable the web download button"""
+        payload = {"patch_url": patch_url.strip()}
+        res = self._request(f"projects?id=eq.{project_id}", method="PATCH", data=payload)
+        return res[0] if res else payload
+
+    def push_zip(self, project_id: str, zip_path: str) -> Dict[str, Any]:
+        """Unpacks a source ZIP and pushes all translatable tables/files to the project"""
+        zp = Path(zip_path).resolve()
+        if not zp.exists():
+            raise FileNotFoundError(f"ZIP file not found: {zp}")
+
+        temp_dir = zp.parent / f".locaforge_unzip_{uuid.uuid4().hex[:8]}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            with zipfile.ZipFile(zp, "r") as zf:
+                zf.extractall(temp_dir)
+
+            exts = {".json", ".csv", ".po", ".xml", ".ini", ".txt"}
+            pushed_files = []
+            total_strings = 0
+            for root, _, files in os.walk(temp_dir):
+                for f in sorted(files):
+                    fp = Path(root) / f
+                    if fp.suffix.lower() in exts:
+                        res = self.push_file(project_id, str(fp))
+                        pushed_files.append(res)
+                        total_strings += res["strings_count"]
+                        print(f"  ✅ Uploaded {res['file_name']} ({res['strings_count']} strings)")
+
+            return {
+                "project_id": project_id,
+                "total_files": len(pushed_files),
+                "total_strings": total_strings,
+            }
+        finally:
+            if temp_dir.exists():
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
@@ -452,25 +484,48 @@ def main():
 
     elif cmd == "set-patch":
         pid = None
-        patch_url = None
-        for i, arg in enumerate(sys.argv):
-            if arg == "--project-id" and i + 1 < len(sys.argv):
+        url = None
+        i = 2
+        while i < len(sys.argv):
+            if sys.argv[i] == "--project-id" and i + 1 < len(sys.argv):
                 pid = sys.argv[i + 1]
-            elif arg == "--url" and i + 1 < len(sys.argv):
-                patch_url = sys.argv[i + 1]
-        if not pid or not patch_url:
-            print("❌ Error: Both --project-id and --url are required.")
-            print("Usage: locaforge_sync.py set-patch --project-id <id> --url <direct_zip_url_or_gdrive_file_url>")
+                i += 2
+            elif sys.argv[i] == "--url" and i + 1 < len(sys.argv):
+                url = sys.argv[i + 1]
+                i += 2
+            else:
+                i += 1
+
+        if not pid or not url:
+            print("❌ Error: --project-id and --url are required.")
+            print("Example: locaforge_sync.py set-patch --project-id <id> --url <google_drive_or_zip_url>")
             sys.exit(1)
 
-        sync.set_patch_url(pid, patch_url)
-        print("🎮 =========================================")
-        print("   GAME PATCH ZIP LINK ATTACHED TO PROJECT")
-        print("=========================================\n")
-        print(f"📌 Project ID : {pid}")
-        print(f"🔗 Patch URL  : {patch_url}")
-        print(f"🌐 Web Studio : {DEFAULT_WEB_URL}/project/{pid}")
-        print("\n👉 Nút 'Bản Cài Game (.ZIP)' trên web hiện đã SÁNG và người dùng có thể tải thẳng về máy!")
+        sync.set_patch_url(pid, url)
+        print(f"✅ Successfully linked patch URL to Project {pid[:8]}:")
+        print(f"   🔗 {url}")
+        print(f"🌐 Game patch button is now ACTIVE on Web: {DEFAULT_WEB_URL}/project/{pid}")
+
+    elif cmd == "push-zip":
+        pid = None
+        zip_f = None
+        i = 2
+        while i < len(sys.argv):
+            if sys.argv[i] == "--project-id" and i + 1 < len(sys.argv):
+                pid = sys.argv[i + 1]
+                i += 2
+            else:
+                zip_f = sys.argv[i]
+                i += 1
+
+        if not pid or not zip_f:
+            print("❌ Error: --project-id and zip file path are required.")
+            print("Example: locaforge_sync.py push-zip --project-id <id> Localization_Source.zip")
+            sys.exit(1)
+
+        print(f"📦 Unpacking and pushing source ZIP {zip_f} to Project {pid[:8]}...")
+        res = sync.push_zip(pid, zip_f)
+        print(f"\n🎉 Successfully uploaded {res['total_files']} files ({res['total_strings']} strings) from ZIP!")
 
 
 if __name__ == "__main__":

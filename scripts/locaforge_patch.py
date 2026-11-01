@@ -476,70 +476,63 @@ class LocaForgePatcher:
         if passed_files > 0:
             print("   ✅ UTF-8 Encoding Verification: PASSED (No font or encoding corruption detected)")
 
-    def pack_patch(self, output_zip: Optional[str] = None) -> str:
-        """Packs only the modified/patched game files (based on Localization_Backup) into a plug-and-play ZIP archive for gamers."""
-        if not self.backup_dir.exists():
-            raise FileNotFoundError("Không tìm thấy thư mục Localization_Backup. Hãy đảm bảo bạn đã chạy import bản dịch vào game trước khi đóng gói!")
-
-        game_name = self.game_root.name
-        out_name = output_zip or f"{game_name}_Vietnamese_Patch.zip"
-        out_path = self.game_root / out_name
-
-        # Find all files that have a .bak in Localization_Backup
-        files_to_pack = []
-        for bak in self.backup_dir.rglob("*.bak"):
-            rel = bak.relative_to(self.backup_dir).with_suffix("")
-            target = self.game_root / rel
-            if target.exists():
-                files_to_pack.append((target, rel))
-
-        # Also check for Ren'Py tl/vietnamese
-        renpy_tl = self.game_root / "game" / "tl" / "vietnamese"
-        if renpy_tl.exists():
-            for rpy in renpy_tl.rglob("*"):
-                if rpy.is_file():
-                    files_to_pack.append((rpy, rpy.relative_to(self.game_root)))
-
-        # Also check if catalog.json was modified
-        catalogs = list(self.game_root.glob("**/StreamingAssets/aa/catalog.json"))
-        for cat in catalogs:
-            if "Localization_Backup" not in str(cat) and (cat, cat.relative_to(self.game_root)) not in files_to_pack:
-                files_to_pack.append((cat, cat.relative_to(self.game_root)))
-
-        if not files_to_pack:
-            raise ValueError("Không tìm thấy tệp đã được Việt hoá nào để đóng gói.")
-
-        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-            for src_p, rel_p in files_to_pack:
-                zf.write(src_p, rel_p)
-
-            # Auto generate Huong_Dan_Cai_Dat.txt
-            readme_text = f"""========================================================================
-BẢN VIỆT HOÁ GAME: {game_name} (LocaForge Plug & Play Patch)
-========================================================================
-
-CÁCH CÀI ĐẶT CỰC KỲ ĐƠN GIẢN:
-1. Giải nén (hoặc copy) toàn bộ các thư mục / tệp trong file ZIP này.
-2. Dán đè (Paste & Replace) trực tiếp vào thư mục cài đặt gốc của game.
-3. Khởi động game và tận hưởng 100% Tiếng Việt!
-
-Kho lưu trữ Patch: https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing
-Dự án dịch thuật: https://locaforge-web.vercel.app
-========================================================================
-"""
-            zf.writestr("Huong_Dan_Cai_Dat.txt", readme_text.encode("utf-8"))
-
-        size_mb = out_path.stat().st_size / (1024 * 1024)
+    def pack_patch(self, output_zip: Optional[str] = None, project_id: Optional[str] = None) -> str:
+        """Packs all modified game localization files into a plug-and-play ZIP release"""
         print("📦 =========================================")
-        print("   ĐÓNG GÓI BẢN CÀI VIỆT HOÁ THÀNH CÔNG!")
+        print("   LOCAFORGE GAME PATCH PACKAGER")
         print("=========================================\n")
-        print(f"📁 Tệp ZIP thành phẩm : {out_path.name}")
-        print(f"⚖️ Dung lượng         : {size_mb:.2f} MB")
-        print(f"📄 Số lượng tệp đã gói: {len(files_to_pack)} tệp")
-        print("👉 Hướng dẫn: Người chơi chỉ cần giải nén đè vào thư mục game là chơi ngay 100%!")
-        print("🌐 Link Google Drive mặc định:")
-        print("   https://drive.google.com/drive/folders/1epqsQJfXL2fEEHuhoWZ8AyO67LdIXRgi?usp=sharing")
-        return str(out_path)
+
+        if not output_zip:
+            proj_title = "Game"
+            if project_id:
+                try:
+                    sync = LocaForgeSync()
+                    p = sync.get_project(project_id)
+                    if p and p.get("title"):
+                        clean_t = "".join(c for c in p["title"] if c.isalnum() or c in " _-").strip()
+                        proj_title = clean_t.replace(" ", "_")
+                except Exception:
+                    pass
+            output_zip = f"{proj_title}_Vietnamese_Patch.zip"
+
+        zip_p = Path(output_zip).resolve()
+        files_to_pack = []
+
+        if self.backup_dir.exists():
+            for orig_f in self.backup_dir.glob("**/*"):
+                if orig_f.is_file():
+                    rel = orig_f.relative_to(self.backup_dir)
+                    if "Localization_Backup" not in rel.parts and "Localization_Source" not in rel.parts:
+                        live_f = self.game_root / rel
+                        if live_f.exists():
+                            parts = rel.parts
+                            if len(parts) > 1 and (self.game_root / parts[0]).is_dir() and any((self.game_root / parts[0]).glob("*_Data")):
+                                arc_name = str(Path(*parts[1:]))
+                            else:
+                                arc_name = str(rel)
+                            files_to_pack.append((live_f, arc_name))
+
+        with zipfile.ZipFile(zip_p, "w", zipfile.ZIP_DEFLATED) as zf:
+            for fpath, arc_name in files_to_pack:
+                zf.write(fpath, arc_name)
+                print(f"   • Packed: {arc_name}")
+
+            readme = f"""=====================================================
+  BẢN DỊCH VIỆT HOÁ GAME
+  Nền tảng dịch thuật: LocaForge
+  Website: https://locaforge-web.vercel.app
+=====================================================
+
+HƯỚNG DẪN CÀI ĐẶT:
+1. Giải nén toàn bộ nội dung file ZIP này vào thư mục cài đặt game.
+2. Chọn "Ghi đè" (Replace/Overwrite) nếu được hỏi.
+3. Khởi động game và tận hưởng bản dịch tiếng Việt!
+"""
+            zf.writestr("HUONG_DAN_CAI_DAT.txt", readme.encode("utf-8"))
+
+        print(f"\n🎉 Successfully created plug-and-play patch archive:")
+        print(f"   📁 {zip_p.name} ({zip_p.stat().st_size} bytes)")
+        return str(zip_p)
 
 
 def main():
@@ -547,18 +540,12 @@ def main():
     zip_path = None
     project_id = None
     pack_mode = False
-    output_pack = None
+    output_patch = None
 
     i = 1
     while i < len(sys.argv):
         arg = sys.argv[i]
-        if arg == "--pack-patch":
-            pack_mode = True
-            i += 1
-        elif arg == "--output" and i + 1 < len(sys.argv):
-            output_pack = sys.argv[i + 1]
-            i += 2
-        elif arg == "--project-id" and i + 1 < len(sys.argv):
+        if arg == "--project-id" and i + 1 < len(sys.argv):
             project_id = sys.argv[i + 1]
             i += 2
         elif arg == "--zip" and i + 1 < len(sys.argv):
@@ -567,6 +554,12 @@ def main():
         elif arg == "--game-dir" and i + 1 < len(sys.argv):
             game_dir = sys.argv[i + 1]
             i += 2
+        elif arg == "--pack-patch":
+            pack_mode = True
+            i += 1
+        elif arg == "--output" and i + 1 < len(sys.argv):
+            output_patch = sys.argv[i + 1]
+            i += 2
         else:
             if not zip_path and arg.endswith(".zip"):
                 zip_path = arg
@@ -574,7 +567,7 @@ def main():
 
     patcher = LocaForgePatcher(game_dir=game_dir)
     if pack_mode:
-        patcher.pack_patch(output_zip=output_pack)
+        patcher.pack_patch(output_zip=output_patch, project_id=project_id)
     else:
         patcher.run(zip_path=zip_path, project_id=project_id)
 
