@@ -68,6 +68,14 @@ class LocaForgeSync:
     def list_projects(self, limit: int = 10) -> List[Dict[str, Any]]:
         return self._request(f"projects?select=id,title,description,created_at,download_count&order=created_at.desc&limit={limit}")
 
+    def set_patch_url(self, project_id: str, patch_url: str) -> Dict[str, Any]:
+        payload = {
+            "patch_url": patch_url.strip(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        res = self._request(f"projects?id=eq.{project_id}", method="PATCH", data=payload)
+        return res[0] if res else payload
+
     def get_project(self, project_id: str) -> Optional[Dict[str, Any]]:
         res = self._request(f"projects?select=*,project_files(*)&id=eq.{project_id}&limit=1")
         return res[0] if res else None
@@ -441,6 +449,28 @@ def main():
         zip_path = sync.export_translated_zip(pid, out)
         print(f"🎉 Exported ZIP archive successfully:")
         print(f"   📁 {zip_path}")
+
+    elif cmd == "set-patch":
+        pid = None
+        patch_url = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--project-id" and i + 1 < len(sys.argv):
+                pid = sys.argv[i + 1]
+            elif arg == "--url" and i + 1 < len(sys.argv):
+                patch_url = sys.argv[i + 1]
+        if not pid or not patch_url:
+            print("❌ Error: Both --project-id and --url are required.")
+            print("Usage: locaforge_sync.py set-patch --project-id <id> --url <direct_zip_url_or_gdrive_file_url>")
+            sys.exit(1)
+
+        sync.set_patch_url(pid, patch_url)
+        print("🎮 =========================================")
+        print("   GAME PATCH ZIP LINK ATTACHED TO PROJECT")
+        print("=========================================\n")
+        print(f"📌 Project ID : {pid}")
+        print(f"🔗 Patch URL  : {patch_url}")
+        print(f"🌐 Web Studio : {DEFAULT_WEB_URL}/project/{pid}")
+        print("\n👉 Nút 'Bản Cài Game (.ZIP)' trên web hiện đã SÁNG và người dùng có thể tải thẳng về máy!")
 
 
 if __name__ == "__main__":
