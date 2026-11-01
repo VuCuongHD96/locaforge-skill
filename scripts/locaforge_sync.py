@@ -33,6 +33,10 @@ DEFAULT_SUPABASE_KEY = os.environ.get(
     "LOCAFORGE_SUPABASE_KEY",
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5a3NxZGVmc3p0dWFrbmh4eWtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMjAwNDQsImV4cCI6MjEwNzg5NjA0NH0.TO7WQgf6HkA0V10jLMskax8jzZQkidyk3szBGEiXGwc"
 )
+DEFAULT_SUPABASE_SERVICE_KEY = os.environ.get(
+    "LOCAFORGE_SUPABASE_SERVICE_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5a3NxZGVmc3p0dWFrbmh4eWtvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjMyMDA0NCwiZXhwIjoyMTA3ODk2MDQ0fQ.R9sDhzGmRimZ64umJ0a7R-XNZvN4Lk2ghM7qklAqGww"
+)
 DEFAULT_WEB_URL = os.environ.get(
     "LOCAFORGE_WEB_URL",
     "https://locaforge-web.vercel.app"
@@ -41,9 +45,10 @@ DEFAULT_AVATAR_ID = "87877a37-4ff2-4673-a604-e51185f77099"
 
 
 class LocaForgeSync:
-    def __init__(self, supabase_url: str = DEFAULT_SUPABASE_URL, supabase_key: str = DEFAULT_SUPABASE_KEY):
+    def __init__(self, supabase_url: str = DEFAULT_SUPABASE_URL, supabase_key: str = DEFAULT_SUPABASE_KEY, service_key: str = DEFAULT_SUPABASE_SERVICE_KEY):
         self.base_url = supabase_url.rstrip("/")
         self.key = supabase_key
+        self.service_key = service_key
         self.headers = {
             "apikey": self.key,
             "Authorization": f"Bearer {self.key}",
@@ -321,6 +326,34 @@ class LocaForgeSync:
         res = self._request(f"projects?id=eq.{project_id}", method="PATCH", data=payload)
         return res[0] if res else payload
 
+    def upload_patch(self, project_id: str, zip_path: str) -> str:
+        """Uploads a game patch ZIP to Supabase Storage and updates project patch_url"""
+        zp = Path(zip_path).resolve()
+        if not zp.exists():
+            raise FileNotFoundError(f"File not found: {zp}")
+
+        with open(zp, "rb") as f:
+            data = f.read()
+
+        object_name = f"{project_id}/{zp.name}"
+        url = f"{self.base_url}/storage/v1/object/patches/{object_name}"
+        headers = {
+            "apikey": self.service_key or self.key,
+            "Authorization": f"Bearer {self.service_key or self.key}",
+            "Content-Type": "application/zip",
+            "x-upsert": "true",
+        }
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                pass
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"Storage upload failed: {e.code} {e.read().decode()}")
+
+        public_url = f"{self.base_url}/storage/v1/object/public/patches/{object_name}"
+        self.set_patch_url(project_id, public_url)
+        return public_url
+
     def push_zip(self, project_id: str, zip_path: str) -> Dict[str, Any]:
         """Unpacks a source ZIP and pushes all translatable tables/files to the project"""
         zp = Path(zip_path).resolve()
@@ -504,6 +537,29 @@ def main():
         sync.set_patch_url(pid, url)
         print(f"✅ Successfully linked patch URL to Project {pid[:8]}:")
         print(f"   🔗 {url}")
+        print(f"🌐 Game patch button is now ACTIVE on Web: {DEFAULT_WEB_URL}/project/{pid}")
+
+    elif cmd == "upload-patch":
+        pid = None
+        zip_f = None
+        i = 2
+        while i < len(sys.argv):
+            if sys.argv[i] == "--project-id" and i + 1 < len(sys.argv):
+                pid = sys.argv[i + 1]
+                i += 2
+            else:
+                zip_f = sys.argv[i]
+                i += 1
+
+        if not pid or not zip_f:
+            print("❌ Error: --project-id and zip file path are required.")
+            print("Example: locaforge_sync.py upload-patch --project-id <id> <Game_Patch.zip>")
+            sys.exit(1)
+
+        print(f"🚀 Uploading patch ZIP {zip_f} to LocaForge Storage for Project {pid[:8]}...")
+        pub_url = sync.upload_patch(pid, zip_f)
+        print(f"✅ Successfully uploaded patch to Supabase Storage!")
+        print(f"   🔗 Direct Download URL: {pub_url}")
         print(f"🌐 Game patch button is now ACTIVE on Web: {DEFAULT_WEB_URL}/project/{pid}")
 
     elif cmd == "push-zip":
