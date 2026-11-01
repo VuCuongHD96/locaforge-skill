@@ -377,8 +377,48 @@ class LocaForgePatcher:
                 with open(eb, "wb") as f:
                     f.write(env.file.save())
                 print(f"   ✅ Saved patched bundle: {eb.relative_to(self.game_root)}")
+                self._disable_addressables_crc()
 
         return total_patched_strings
+
+    def _disable_addressables_crc(self):
+        """Disables CRC checking in Addressables catalog.json so modified bundles load without CRC mismatch"""
+        import base64
+        catalogs = list(self.game_root.glob("**/StreamingAssets/aa/catalog.json"))
+        for cat_p in catalogs:
+            try:
+                self._backup_file(cat_p)
+                with open(cat_p, "r", encoding="utf-8") as f:
+                    cat = json.load(f)
+
+                if "m_ExtraDataString" in cat:
+                    raw = bytearray(base64.b64decode(cat["m_ExtraDataString"]))
+                    needle = '\"m_Crc\":'.encode("utf-16le")
+                    pos = 0
+                    count = 0
+                    while True:
+                        idx = raw.find(needle, pos)
+                        if idx == -1:
+                            break
+                        d_start = idx + len(needle)
+                        d_end = d_start
+                        while d_end + 2 <= len(raw) and raw[d_end:d_end+2].decode("utf-16le", errors="ignore").isdigit():
+                            d_end += 2
+
+                        num_chars = (d_end - d_start) // 2
+                        if num_chars > 0:
+                            padded_str = (" 0" + " " * (num_chars - 2)) if num_chars >= 2 else "0"
+                            raw[d_start:d_end] = padded_str.encode("utf-16le")
+                            count += 1
+                        pos = d_end
+
+                    if count > 0:
+                        cat["m_ExtraDataString"] = base64.b64encode(raw).decode("ascii")
+                        with open(cat_p, "w", encoding="utf-8") as f:
+                            json.dump(cat, f)
+                        print(f"   ✅ Disabled Addressables CRC check in: {cat_p.relative_to(self.game_root)} ({count} bundles)")
+            except Exception as e:
+                print(f"  ⚠️ Warning disabling Addressables CRC: {e}")
 
     def _patch_unity(self, game_info: Dict[str, Any]):
         # Check if project has custom patch script (e.g. apply_vietnamese.py or .sh)
