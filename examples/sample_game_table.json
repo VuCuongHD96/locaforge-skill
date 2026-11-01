@@ -1,0 +1,37 @@
+[
+  {
+    "table": "MainMenu",
+    "id": 128057131008,
+    "key": "new_game",
+    "english": "New Game",
+    "vietnamese": "Trò Chơi Mới"
+  },
+  {
+    "table": "MainMenu",
+    "id": 26937549176832,
+    "key": "load_game",
+    "english": "Load Game",
+    "vietnamese": "Tải Trò Chơi"
+  },
+  {
+    "table": "MainMenu",
+    "id": 27007459835904,
+    "key": "option",
+    "english": "Options",
+    "vietnamese": "Tùy Chọn"
+  },
+  {
+    "table": "MainMenu",
+    "id": 27007459835905,
+    "key": "credits",
+    "english": "Credits",
+    "vietnamese": "Danh Sách Thực Hiện"
+  },
+  {
+    "table": "MainMenu",
+    "id": 27007459835906,
+    "key": "quit_game",
+    "english": "Quit Game",
+    "vietnamese": "Thoát Trò Chơi"
+  }
+]
