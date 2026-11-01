@@ -164,13 +164,17 @@ python3 scripts/locaforge_patch.py --pack-patch --project-id "<PROJECT_ID>"
 ```
 Lệnh sẽ sinh ra gói `[GameName]_Vietnamese_Patch.zip` chứa cấu trúc thư mục game sẵn sàng sao chép đè kèm theo tệp `HUONG_DAN_CAI_DAT.txt`.
 
-#### 4.2. Gắn Link Bản Cài ZIP Lên Project Web
-Thực thi lệnh liên kết URL tải bản cài game lên Supabase Project:
-```bash
-python3 scripts/locaforge_sync.py set-patch --project-id "<PROJECT_ID>" --url "<URL_GDRIVE_HOẶC_DIRECT_ZIP>"
-```
-- Sử dụng Google Drive Hub mặc định hoặc link tải trực tiếp do người dùng cung cấp.
-- Khi được liên kết, nút **"Bản Cài Game (.ZIP)"** màu xanh ngọc trên LocaForge Web sẽ tự động kích hoạt để cộng đồng người chơi có thể tải về cài đặt 1-click.
+#### 4.2. Tải File ZIP Trực Tiếp Lên Storage Hoặc Gắn Link Web
+- **Cách 1: Tải file ZIP thẳng lên LocaForge Cloud Storage (Tự động 100%)**:
+  ```bash
+  python3 scripts/locaforge_sync.py upload-patch --project-id "<PROJECT_ID>" "<File_Patch.zip>"
+  ```
+  Script sẽ đẩy file nén lên bucket Storage công khai và tự động cập nhật direct download URL vào dự án.
+- **Cách 2: Gắn URL có sẵn (Google Drive / Direct link)**:
+  ```bash
+  python3 scripts/locaforge_sync.py set-patch --project-id "<PROJECT_ID>" --url "<URL_GDRIVE_HOẶC_DIRECT_ZIP>"
+  ```
+- Khi hoàn tất, nút **"Bản Cài Game (.ZIP)"** màu xanh ngọc trên LocaForge Web sẽ tự động kích hoạt để cộng đồng người chơi có thể tải về cài đặt 1-click.
 
 ---
 
