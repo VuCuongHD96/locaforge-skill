@@ -21,6 +21,7 @@ import csv
 import io
 import urllib.request
 import urllib.error
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -77,9 +78,117 @@ class LocaForgeSync:
         res = self._request(f"projects?select=*,project_files(*)&id=eq.{project_id}&limit=1")
         return res[0] if res else None
 
-    def create_project(self, title: str, description: str = "", user_id: Optional[str] = None) -> Dict[str, Any]:
+    def find_projects(self, title_query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """Find existing projects on LocaForge Web matching the title query."""
+        clean_q = title_query.strip()
+        if not clean_q:
+            return []
+
+        enc_q = urllib.parse.quote(clean_q)
+        endpoint = f"projects?select=*,project_files(id,file_name)&title=ilike.*{enc_q}*&order=created_at.desc&limit={limit}"
+        matches = self._request(endpoint) or []
+
+        # If no match and query has multiple words, try matching with individual words
+        if not matches and len(clean_q.split()) > 1:
+            words = [w for w in clean_q.split() if len(w) > 2]
+            for w in words:
+                enc_w = urllib.parse.quote(w)
+                res = self._request(
+                    f"projects?select=*,project_files(id,file_name)&title=ilike.*{enc_w}*&order=created_at.desc&limit={limit}"
+                )
+                for r in (res or []):
+                    if not any(m["id"] == r["id"] for m in matches):
+                        matches.append(r)
+                if matches:
+                    break
+
+        return matches
+
+    def check_game_directory(self, game_dir: str = ".") -> Dict[str, Any]:
+        """Inspects game folder to detect potential game titles and checks if it exists on LocaForge Web."""
+        root = Path(game_dir).resolve()
+        candidate_titles: List[str] = []
+
+        # 1. From Unity *_Data folder
+        for d in list(root.glob("*_Data")) + list(root.glob("*/*_Data")):
+            title = d.name[:-5].strip()
+            if title and title not in candidate_titles:
+                candidate_titles.append(title)
+
+        # 2. From Mac .app bundle
+        for app in list(root.glob("*.app")) + list(root.glob("*/*.app")):
+            title = app.stem.strip()
+            if title and title not in candidate_titles:
+                candidate_titles.append(title)
+
+        # 3. From Windows .exe files
+        for exe in root.glob("*.exe"):
+            stem = exe.stem.strip()
+            if stem.lower() not in {
+                "unitycrashhandler64", "unitycrashhandler32", "unins000",
+                "setup", "dxwebsetup", "install"
+            }:
+                if stem not in candidate_titles:
+                    candidate_titles.append(stem)
+
+        # 4. From RPG Maker package.json
+        for pkg_candidate in [root / "package.json", root / "www" / "package.json"]:
+            if pkg_candidate.exists():
+                try:
+                    with open(pkg_candidate, "r", encoding="utf-8") as f:
+                        pkg_data = json.load(f)
+                        name = pkg_data.get("name") or pkg_data.get("title")
+                        if name and str(name).strip() not in candidate_titles:
+                            candidate_titles.append(str(name).strip())
+                except Exception:
+                    pass
+
+        # 5. From Ren'Py options.rpy or script.rpy
+        game_sub = root / "game"
+        if game_sub.exists():
+            for rpy in game_sub.glob("*.rpy"):
+                try:
+                    content = rpy.read_text(encoding="utf-8", errors="ignore")
+                    for line in content.splitlines():
+                        if "config.name" in line and "=" in line:
+                            val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            if val and val not in candidate_titles:
+                                candidate_titles.append(val)
+                                break
+                except Exception:
+                    pass
+
+        # 6. Fallback: current directory name
+        dir_name = root.name.strip()
+        if dir_name and dir_name not in candidate_titles and dir_name not in {
+            "Desktop", "project", "Downloads", "src", "bin"
+        }:
+            candidate_titles.append(dir_name)
+
+        matched_projects: List[Dict[str, Any]] = []
+        seen_ids = set()
+        for cand in candidate_titles:
+            results = self.find_projects(cand, limit=3)
+            for p in results:
+                if p["id"] not in seen_ids:
+                    seen_ids.add(p["id"])
+                    matched_projects.append(p)
+
+        return {
+            "game_dir": str(root),
+            "candidate_titles": candidate_titles,
+            "detected_game_name": candidate_titles[0] if candidate_titles else root.name,
+            "matched_projects": matched_projects,
+            "exists_on_web": len(matched_projects) > 0,
+        }
+
+    def create_project(self, title: str, description: str = "", user_id: Optional[str] = None, target_engine: str = "generic") -> Dict[str, Any]:
         proj_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
+        clean_engine = (target_engine or "generic").strip().lower()
+        if clean_engine not in {"unity", "renpy", "rpgmaker", "generic"}:
+            clean_engine = "generic"
+
         payload = {
             "id": proj_id,
             "title": title.strip(),
@@ -88,12 +197,30 @@ class LocaForgeSync:
             "created_at": now,
             "updated_at": now,
             "download_count": 0,
+            "target_engine": clean_engine,
         }
         if user_id:
             payload["user_id"] = user_id
 
         res = self._request("projects", method="POST", data=payload)
         return res[0] if res else payload
+
+    def set_target_engine(self, project_id: str, target_engine: str) -> None:
+        clean_engine = (target_engine or "generic").strip().lower()
+        if clean_engine not in {"unity", "renpy", "rpgmaker", "generic"}:
+            clean_engine = "generic"
+
+        url = f"{self.base_url}/rest/v1/projects?id=eq.{project_id}"
+        body = json.dumps({"target_engine": clean_engine}).encode("utf-8")
+        headers = dict(self.headers)
+        headers["Prefer"] = "return=minimal"
+        req = urllib.request.Request(url, data=body, headers=headers, method="PATCH")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                pass
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"HTTP {e.code} on PATCH projects target_engine: {err_body}")
 
     def push_file(self, project_id: str, file_path: str, folder_path: str = "") -> Dict[str, Any]:
         path = Path(file_path).resolve()
@@ -216,19 +343,22 @@ class LocaForgeSync:
         translated_count = 0
 
         for fid in file_ids:
-            # Count strings
-            s_res = self._request(f"source_strings?select=id&file_id=eq.{fid}")
-            s_ids = [s["id"] for s in (s_res or [])]
-            total_strings += len(s_ids)
-
-            if s_ids:
-                # Count translations
-                # Batch in groups of 50
-                for i in range(0, len(s_ids), 50):
-                    batch = s_ids[i:i + 50]
-                    ids_str = ",".join(batch)
-                    t_res = self._request(f"translations?select=id,source_id&lang=eq.vi&source_id=in.({ids_str})")
-                    translated_count += len(t_res or [])
+            offset = 0
+            page_size = 1000
+            while True:
+                batch = self._request(
+                    f"source_strings?select=id,translations(id)&file_id=eq.{fid}&offset={offset}&limit={page_size}"
+                )
+                if not batch:
+                    break
+                total_strings += len(batch)
+                for item in batch:
+                    trans = item.get("translations") or []
+                    if len(trans) > 0:
+                        translated_count += 1
+                if len(batch) < page_size:
+                    break
+                offset += page_size
 
         pct = round((translated_count / total_strings * 100), 1) if total_strings > 0 else 0
         return {
@@ -258,16 +388,27 @@ class LocaForgeSync:
                 fname = file_info["file_name"]
                 folder = (file_info.get("folder_path") or "").strip().strip("/")
 
-                # Fetch source strings
-                source_strings = self._request(f"source_strings?select=id,key,original_text,context_note,order_index&file_id=eq.{fid}&order=order_index.asc")
+                # Fetch all source strings with pagination
+                source_strings = []
+                offset = 0
+                page_size = 1000
+                while True:
+                    batch = self._request(f"source_strings?select=id,key,original_text,context_note,order_index&file_id=eq.{fid}&order=order_index.asc&offset={offset}&limit={page_size}")
+                    if not batch:
+                        break
+                    source_strings.extend(batch)
+                    if len(batch) < page_size:
+                        break
+                    offset += page_size
+
                 if not source_strings:
                     continue
 
                 # Fetch translations for these strings
                 s_ids = [s["id"] for s in source_strings]
                 translations_map: Dict[str, str] = {}
-                for i in range(0, len(s_ids), 50):
-                    batch = s_ids[i:i + 50]
+                for i in range(0, len(s_ids), 100):
+                    batch = s_ids[i:i + 100]
                     ids_str = ",".join(batch)
                     t_res = self._request(f"translations?select=source_id,translated_text&lang=eq.vi&order=upvotes.desc&source_id=in.({ids_str})")
                     for t in (t_res or []):
@@ -393,17 +534,93 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
         print("Usage: locaforge_sync.py <command> [options]")
         print("\nCommands:")
-        print("  list-projects")
-        print("  create-project --title <title> [--desc <desc>]")
+        print("  check-game     [--dir <dir>]                                              (Smart pre-check: scans game & checks web)")
+        print("  find-project   --title <title>                                            (Find existing projects on web)")
+        print("  list-projects                                                             (List recent projects)")
+        print("  create-project --title <title> [--desc <desc>] [--engine <engine>]        (Create new project)")
+        print("  set-engine     --project-id <id> --engine <unity|renpy|rpgmaker|generic>")
         print("  push-files     --project-id <id> [--dir <dir>] [file1 file2 ...]")
         print("  status         --project-id <id>")
         print("  export-zip     --project-id <id> [--output <file.zip>]")
+        print("  set-patch      --project-id <id> --url <url>")
+        print("  upload-patch   --project-id <id> <file.zip>")
         sys.exit(0)
 
     cmd = sys.argv[1]
     sync = LocaForgeSync()
 
-    if cmd == "list-projects":
+    if cmd == "check-game":
+        game_dir = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else "."
+        for i, arg in enumerate(sys.argv):
+            if arg in {"--dir", "-d"} and i + 1 < len(sys.argv):
+                game_dir = sys.argv[i + 1]
+
+        print("🔍 Đang quét thư mục game và đối soát trên LocaForge Web...")
+        check_res = sync.check_game_directory(game_dir)
+        det_name = check_res["detected_game_name"]
+        matches = check_res["matched_projects"]
+
+        print("\n🎮 ================================================================")
+        print("   LOCAFORGE GAME PRE-CHECK & WEB VERIFICATION")
+        print("================================================================\n")
+        print(f"📁 Thư mục game : {check_res['game_dir']}")
+        print(f"🎯 Nhận diện    : {det_name}")
+        if check_res["candidate_titles"]:
+            print(f"🔎 Từ khóa quét : {', '.join(check_res['candidate_titles'])}")
+
+        if matches:
+            print(f"\n✨ ĐÃ TÌM THẤY {len(matches)} DỰ ÁN TRÊN LOCAFORGE WEB!\n")
+            for idx, p in enumerate(matches, 1):
+                pid = p["id"]
+                web_link = f"{DEFAULT_WEB_URL}/project/{pid}"
+                stats = sync.get_project_stats(pid)
+                print(f"[{idx}] {p['title']}")
+                print(f"    🆔 Project ID      : {pid}")
+                print(f"    ⚙️ Engine          : {p.get('target_engine', 'generic').upper()}")
+                print(f"    📊 Tiến độ         : {stats['translated_strings']} / {stats['total_strings']} câu ({stats['completion_rate']}%)")
+                print(f"    🌐 Link Web Studio : {web_link}\n")
+
+            print("👉 HƯỚNG DẪN TIẾP THEO:")
+            print("   1. Nhấp vào Link Web Studio để xem xét hoặc dịch thêm các câu còn lại.")
+            print("   2. Khi bạn thấy bản dịch đã OK, chỉ cần gõ 'OK' hoặc 'Cài luôn',")
+            print("      Agent sẽ tự động nạp bản dịch tiếng Việt vào game!")
+            print(f"      (Lệnh: python3 scripts/locaforge_patch.py --project-id {matches[0]['id']})")
+        else:
+            print("\nℹ️  Game này CHƯA CÓ dự án trên LocaForge Web.")
+            print("👉 Tiếp tục quy trình:")
+            print(f"   1. Trích xuất source text: python3 scripts/locaforge_extract.py \"{game_dir}\" Localization_Source")
+            print(f"   2. Khởi tạo dự án: python3 scripts/locaforge_sync.py create-project --title \"{det_name}\"")
+            print("   3. Đẩy dữ liệu lên web & mở link dịch.")
+        print("================================================================\n")
+
+    elif cmd == "find-project":
+        title_q = None
+        for i, arg in enumerate(sys.argv):
+            if arg in {"--title", "-t"} and i + 1 < len(sys.argv):
+                title_q = sys.argv[i + 1]
+
+        if not title_q:
+            print("❌ Error: --title is required.")
+            print("Example: locaforge_sync.py find-project --title \"Probably Stolen\"")
+            sys.exit(1)
+
+        print(f"🔎 Đang tìm kiếm dự án với từ khóa: '{title_q}'...")
+        matches = sync.find_projects(title_q)
+        if matches:
+            print(f"\n✨ Tìm thấy {len(matches)} dự án phù hợp:\n")
+            for idx, p in enumerate(matches, 1):
+                pid = p["id"]
+                web_link = f"{DEFAULT_WEB_URL}/project/{pid}"
+                stats = sync.get_project_stats(pid)
+                print(f"[{idx}] {p['title']}")
+                print(f"    🆔 Project ID      : {pid}")
+                print(f"    ⚙️ Engine          : {p.get('target_engine', 'generic').upper()}")
+                print(f"    📊 Tiến độ         : {stats['translated_strings']} / {stats['total_strings']} câu ({stats['completion_rate']}%)")
+                print(f"    🌐 Link Web Studio : {web_link}\n")
+        else:
+            print(f"❌ Không tìm thấy dự án nào có tên khớp với '{title_q}'.")
+
+    elif cmd == "list-projects":
         projects = sync.list_projects()
         print("\n📋 LocaForge Projects:")
         for p in projects:
@@ -413,13 +630,16 @@ def main():
     elif cmd == "create-project":
         title = "My Game Translation"
         desc = ""
+        engine = "generic"
         for i, arg in enumerate(sys.argv):
             if arg == "--title" and i + 1 < len(sys.argv):
                 title = sys.argv[i + 1]
             elif arg == "--desc" and i + 1 < len(sys.argv):
                 desc = sys.argv[i + 1]
+            elif arg in {"--engine", "-e"} and i + 1 < len(sys.argv):
+                engine = sys.argv[i + 1]
 
-        proj = sync.create_project(title, desc)
+        proj = sync.create_project(title, desc, target_engine=engine)
         pid = proj["id"]
         web_link = f"{DEFAULT_WEB_URL}/project/{pid}"
         print("✨ =========================================")
@@ -427,9 +647,27 @@ def main():
         print("=========================================\n")
         print(f"📌 Project ID : {pid}")
         print(f"🎮 Title      : {proj['title']}")
+        print(f"⚙️ Target Engine: {proj.get('target_engine', engine)}")
         print(f"🌐 Web Link   : {web_link}\n")
         print("👉 You can now push source files using:")
         print(f"   locaforge_sync.py push-files --project-id {pid} --dir Localization_Source/tables")
+
+    elif cmd == "set-engine":
+        pid = None
+        engine = None
+        for i, arg in enumerate(sys.argv):
+            if arg == "--project-id" and i + 1 < len(sys.argv):
+                pid = sys.argv[i + 1]
+            elif arg in {"--engine", "-e"} and i + 1 < len(sys.argv):
+                engine = sys.argv[i + 1]
+
+        if not pid or not engine:
+            print("❌ Error: --project-id and --engine are required.")
+            print("Example: locaforge_sync.py set-engine --project-id <id> --engine unity")
+            sys.exit(1)
+
+        sync.set_target_engine(pid, engine)
+        print(f"✅ Successfully set target engine of Project {pid[:8]} to: {engine}")
 
     elif cmd == "push-files":
         pid = None

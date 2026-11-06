@@ -381,8 +381,8 @@ class LocaForgePatcher:
 
         return total_patched_strings
 
-    def _disable_addressables_crc(self):
-        """Disables CRC checking in Addressables catalog.json so modified bundles load without CRC mismatch"""
+    def _disable_addressables_crc(self, target_hashes: Optional[List[str]] = None):
+        """Disables CRC checking in Addressables catalog.json for modified bundles"""
         import base64
         catalogs = [c for c in self.game_root.glob("**/StreamingAssets/aa/catalog.json") if "Localization_Backup" not in str(c)]
         for cat_p in catalogs:
@@ -393,30 +393,34 @@ class LocaForgePatcher:
 
                 if "m_ExtraDataString" in cat:
                     raw = bytearray(base64.b64decode(cat["m_ExtraDataString"]))
-                    needle = '\"m_Crc\":'.encode("utf-16le")
-                    pos = 0
+                    # Target english bundle hash or given hashes
+                    hashes = target_hashes or ["b1967d3e968fac290db750ebe08d001e"]
                     count = 0
-                    while True:
-                        idx = raw.find(needle, pos)
-                        if idx == -1:
-                            break
-                        d_start = idx + len(needle)
-                        d_end = d_start
-                        while d_end + 2 <= len(raw) and raw[d_end:d_end+2].decode("utf-16le", errors="ignore").isdigit():
-                            d_end += 2
-
-                        num_chars = (d_end - d_start) // 2
+                    for h in hashes:
+                        h_bytes = f'"{h}"'.encode("utf-16le")
+                        h_idx = raw.find(h_bytes)
+                        if h_idx == -1:
+                            continue
+                        crc_needle = '\"m_Crc\":'.encode("utf-16le")
+                        crc_idx = raw.find(crc_needle, h_idx)
+                        if crc_idx == -1:
+                            continue
+                        val_start = crc_idx + len(crc_needle)
+                        comma_needle = ','.encode("utf-16le")
+                        comma_idx = raw.find(comma_needle, val_start)
+                        if comma_idx == -1:
+                            continue
+                        num_chars = (comma_idx - val_start) // 2
                         if num_chars > 0:
-                            padded_str = (" 0" + " " * (num_chars - 2)) if num_chars >= 2 else "0"
-                            raw[d_start:d_end] = padded_str.encode("utf-16le")
+                            padded_str = "0" + " " * (num_chars - 1)
+                            raw[val_start:comma_idx] = padded_str.encode("utf-16le")
                             count += 1
-                        pos = d_end
 
                     if count > 0:
                         cat["m_ExtraDataString"] = base64.b64encode(raw).decode("ascii")
                         with open(cat_p, "w", encoding="utf-8") as f:
                             json.dump(cat, f)
-                        print(f"   ✅ Disabled Addressables CRC check in: {cat_p.relative_to(self.game_root)} ({count} bundles)")
+                        print(f"   ✅ Disabled Addressables CRC check in: {cat_p.relative_to(self.game_root)} ({count} bundle)")
             except Exception as e:
                 print(f"  ⚠️ Warning disabling Addressables CRC: {e}")
 
@@ -517,7 +521,15 @@ class LocaForgePatcher:
                 zf.write(fpath, arc_name)
                 print(f"   • Packed: {arc_name}")
 
-            readme = f"""=====================================================
+            # Include installer helper scripts if present
+            for helper in ["install_patch.bat", "install_patch.sh", "Huong_Dan_Cai_Dat.txt"]:
+                helper_path = self.game_root / helper
+                if helper_path.exists():
+                    zf.write(helper_path, helper)
+                    print(f"   • Packed installer: {helper}")
+
+            if not (self.game_root / "Huong_Dan_Cai_Dat.txt").exists():
+                readme = f"""=====================================================
   BẢN DỊCH VIỆT HOÁ GAME
   Nền tảng dịch thuật: LocaForge
   Website: https://locaforge-web.vercel.app
@@ -528,7 +540,7 @@ HƯỚNG DẪN CÀI ĐẶT:
 2. Chọn "Ghi đè" (Replace/Overwrite) nếu được hỏi.
 3. Khởi động game và tận hưởng bản dịch tiếng Việt!
 """
-            zf.writestr("HUONG_DAN_CAI_DAT.txt", readme.encode("utf-8"))
+                zf.writestr("HUONG_DAN_CAI_DAT.txt", readme.encode("utf-8"))
 
         print(f"\n🎉 Successfully created plug-and-play patch archive:")
         print(f"   📁 {zip_p.name} ({zip_p.stat().st_size} bytes)")
